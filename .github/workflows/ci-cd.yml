@@ -1,46 +1,52 @@
 name: Ranked Match Tracker CI/CD
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
 permissions:
   contents: read
 
-concurrency:
-  group: ranked-tracker-pages
-  cancel-in-progress: false
-
 jobs:
-  test-and-build:
+  check-and-report:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: Run tests
+      - name: Run Python tests
+        id: tests
         run: python -m unittest -v
 
-      - name: Build dashboard
-        run: python build.py
+      - name: Check match data and generate report
+        id: report
+        run: python make_report.py
 
-      - name: Upload dashboard
-        uses: actions/upload-pages-artifact@v4
+      - name: Show feedback in Actions
+        if: always()
+        env:
+          TEST_STATUS: ${{ steps.tests.outcome }}
+          REPORT_STATUS: ${{ steps.report.outcome }}
+        run: |
+          {
+            echo "## Pipeline feedback"
+            echo "- Python tests: $TEST_STATUS"
+            echo "- Match data and report: $REPORT_STATUS"
+            echo
+            if [ -f report.md ]; then
+              cat report.md
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save downloadable report
+        if: success() && github.event_name == 'push'
+        uses: actions/upload-artifact@v7
         with:
-          path: site
-
-  publish:
-    needs: test-and-build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment: github-pages
-    steps:
-      - name: Publish dashboard
-        uses: actions/deploy-pages@v4
+          name: ranked-match-report
+          path: report.md
+          if-no-files-found: error
