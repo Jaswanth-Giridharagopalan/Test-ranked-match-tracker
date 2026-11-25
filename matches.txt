@@ -2,3 +2,4 @@ WIN
 LOSS
 WIN
 LOSS
+WON
